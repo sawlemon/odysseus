@@ -128,6 +128,7 @@ def setup_memory_routes(memory_manager: MemoryManager, session_manager: SessionM
             try:
                 asyncio.create_task(hindsight.retain(
                     text,
+                    owner=user,
                     metadata={
                         "category": memory_data.category,
                         "source": memory_data.source,
@@ -168,7 +169,7 @@ def setup_memory_routes(memory_manager: MemoryManager, session_manager: SessionM
         if hindsight and hindsight.healthy:
             try:
                 seen_texts = {m.get("text", "").lower() for m in relevant}
-                for hit in hindsight.recall(query, top_k=20):
+                for hit in hindsight.recall(query, top_k=20, owner=user):
                     if hit["text"].lower() not in seen_texts:
                         relevant.append({"text": hit["text"], "category": "hindsight"})
                         seen_texts.add(hit["text"].lower())
@@ -558,6 +559,7 @@ def setup_memory_routes(memory_manager: MemoryManager, session_manager: SessionM
                     try:
                         asyncio.create_task(hindsight.retain(
                             text.strip(),
+                            owner=user,
                             metadata={"category": final_category, "source": "user_edit", "owner": user or ""},
                         ))
                     except Exception:

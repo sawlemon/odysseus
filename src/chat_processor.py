@@ -290,7 +290,7 @@ class ChatProcessor:
             if self.hindsight and self.hindsight.healthy:
                 try:
                     _seen_texts = {m["text"].lower() for m in self._last_used_memories}
-                    h_hits = self.hindsight.recall(message, top_k=3)
+                    h_hits = self.hindsight.recall(message, top_k=3, owner=owner)
                     h_new = [h for h in h_hits if h["text"].lower() not in _seen_texts]
                     if h_new:
                         h_text = "\n".join(f"- {h['text']}" for h in h_new)

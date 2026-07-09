@@ -343,6 +343,7 @@ class ChatHandler:
                     try:
                         asyncio.create_task(self.hindsight.retain(
                             memory_text,
+                            owner=getattr(session, "owner", None),
                             metadata={"category": "fact", "source": "user"},
                         ))
                     except Exception:

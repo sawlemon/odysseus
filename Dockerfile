@@ -6,6 +6,11 @@
 FROM python:3.14-slim AS realesrgan-wheels
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
+# basicsr's build backend requires torch/numpy/cython at build time. Without
+# pre-installing, pip fetches full GPU torch (427 MB) + CUDA libs (2 GB+) into
+# the layer and exhausts disk. CPU torch satisfies the build dep at ~200 MB.
+RUN pip install --no-cache-dir numpy cython \
+    && pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 COPY docker/build-realesrgan-wheels.sh /usr/local/bin/build-realesrgan-wheels.sh
 RUN bash /usr/local/bin/build-realesrgan-wheels.sh /wheels
 

@@ -66,5 +66,7 @@ assert patched == 3, f"expected to patch 3 setup.py files, patched {patched}"
 PY
 
 echo ">> building wheels into ${OUT}"
-pip wheel --no-deps -w "$OUT" ./basicsr-* ./gfpgan-* ./facexlib-*
+# --no-build-isolation reuses the pre-installed CPU torch/numpy/cython instead
+# of pip fetching a fresh isolated environment with GPU torch + CUDA packages.
+pip wheel --no-deps --no-build-isolation -w "$OUT" ./basicsr-* ./gfpgan-* ./facexlib-*
 ls -l "$OUT"
