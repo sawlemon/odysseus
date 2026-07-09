@@ -1,4 +1,5 @@
 # routes/memory_routes.py
+import asyncio
 from fastapi import APIRouter, Form, HTTPException, Request, UploadFile, File
 from typing import Dict, Any, Optional, List
 import json
@@ -35,7 +36,7 @@ from src.upload_limits import read_upload_limited, MEMORY_IMPORT_MAX_BYTES
 logger = logging.getLogger(__name__)
 
 
-def setup_memory_routes(memory_manager: MemoryManager, session_manager: SessionManager, memory_vector=None):
+def setup_memory_routes(memory_manager: MemoryManager, session_manager: SessionManager, memory_vector=None, hindsight=None):
     """Set up memory-related routes."""
     router = APIRouter(prefix="/api/memory", tags=["memory"])
 
@@ -122,6 +123,20 @@ def setup_memory_routes(memory_manager: MemoryManager, session_manager: SessionM
         # Sync vector index
         if memory_vector and memory_vector.healthy:
             memory_vector.add(new_entry["id"], text)
+        # Mirror to Hindsight (best-effort background task)
+        if hindsight and hindsight.healthy:
+            try:
+                asyncio.create_task(hindsight.retain(
+                    text,
+                    metadata={
+                        "category": memory_data.category,
+                        "source": memory_data.source,
+                        "owner": user or "",
+                        "session_id": memory_data.session_id or "",
+                    },
+                ))
+            except Exception:
+                pass
         try:
             from src.event_bus import fire_event
             fire_event("memory_added", user)
@@ -148,6 +163,17 @@ def setup_memory_routes(memory_manager: MemoryManager, session_manager: SessionM
             memories = [m for m in memories if category in m.get("categories", [m.get("category", "")])]
 
         relevant = memory_manager.get_relevant_memories(query, memories, threshold=0.05, max_items=20)
+
+        # Merge Hindsight recall (dedup by text, sync call is safe in a sync route)
+        if hindsight and hindsight.healthy:
+            try:
+                seen_texts = {m.get("text", "").lower() for m in relevant}
+                for hit in hindsight.recall(query, top_k=20):
+                    if hit["text"].lower() not in seen_texts:
+                        relevant.append({"text": hit["text"], "category": "hindsight"})
+                        seen_texts.add(hit["text"].lower())
+            except Exception:
+                pass
 
         return {"memories": relevant, "total": len(relevant), "query": query}
 
@@ -509,7 +535,7 @@ def setup_memory_routes(memory_manager: MemoryManager, session_manager: SessionM
         raise HTTPException(404, "Memory not found")
 
     @router.put("/{memory_id}")
-    def update_memory(request: Request, memory_id: str, text: str = Form(...), category: str = Form(None)):
+    async def update_memory(request: Request, memory_id: str, text: str = Form(...), category: str = Form(None)):
         """Update an existing memory item with new text and optional category."""
         user = _owner(request)
         all_mem = memory_manager.load_all()
@@ -520,12 +546,22 @@ def setup_memory_routes(memory_manager: MemoryManager, session_manager: SessionM
                 if category:
                     all_mem[i]["category"] = category
                 all_mem[i]["timestamp"] = int(time.time())
+                final_category = all_mem[i].get("category", "fact")
 
                 memory_manager.save(all_mem)
                 # Sync vector index (remove old, add updated)
                 if memory_vector and memory_vector.healthy:
                     memory_vector.remove(memory_id)
                     memory_vector.add(memory_id, text.strip())
+                # Mirror edit to Hindsight (best-effort background task)
+                if hindsight and hindsight.healthy:
+                    try:
+                        asyncio.create_task(hindsight.retain(
+                            text.strip(),
+                            metadata={"category": final_category, "source": "user_edit", "owner": user or ""},
+                        ))
+                    except Exception:
+                        pass
                 return {"ok": True, "message": "Memory updated successfully"}
 
         raise HTTPException(404, f"Memory item {memory_id} not found")

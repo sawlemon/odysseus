@@ -68,6 +68,7 @@ class ChatHandler:
         research_handler,
         preset_manager,
         upload_handler,
+        hindsight=None,
     ):
         self.session_manager = session_manager
         self.memory_manager = memory_manager
@@ -75,6 +76,7 @@ class ChatHandler:
         self.research_handler = research_handler
         self.preset_manager = preset_manager
         self.upload_handler = upload_handler
+        self.hindsight = hindsight
 
     # ------------------------------------------------------------------
     # Preset helpers
@@ -336,6 +338,15 @@ class ChatHandler:
                 new_entry = self.memory_manager.add_entry(memory_text)
                 mem.append(new_entry)
                 self.memory_manager.save(mem)
+                # Mirror to Hindsight (best-effort background task)
+                if self.hindsight and self.hindsight.healthy:
+                    try:
+                        asyncio.create_task(self.hindsight.retain(
+                            memory_text,
+                            metadata={"category": "fact", "source": "user"},
+                        ))
+                    except Exception:
+                        pass
 
             session.add_message(ChatMessage("user", message))
             session.add_message(

@@ -37,6 +37,7 @@ MAX_PIPELINE_STEPS = 10
 _session_manager = None
 _memory_manager = None
 _memory_vector = None
+_hindsight = None
 _rag_manager = None
 _personal_docs_manager = None
 
@@ -54,10 +55,11 @@ def get_session_manager():
     return _session_manager
 
 
-def set_memory_manager(mgr, vector=None):
-    global _memory_manager, _memory_vector
+def set_memory_manager(mgr, vector=None, hindsight=None):
+    global _memory_manager, _memory_vector, _hindsight
     _memory_manager = mgr
     _memory_vector = vector
+    _hindsight = hindsight
 
 
 def set_rag_manager(rag_mgr, personal_docs_mgr=None):
@@ -353,6 +355,15 @@ async def do_manage_memory(content: str, session_id: Optional[str] = None, owner
                 _memory_vector.add(entry["id"], text)
             except Exception:
                 pass
+        # Mirror to Hindsight (best-effort background task)
+        if _hindsight and _hindsight.healthy:
+            try:
+                asyncio.create_task(_hindsight.retain(
+                    text,
+                    metadata={"category": category, "source": "ai_agent", "owner": owner or ""},
+                ))
+            except Exception:
+                pass
         try:
             from src.event_bus import fire_event
             fire_event("memory_added", owner)
@@ -390,6 +401,15 @@ async def do_manage_memory(content: str, session_id: Optional[str] = None, owner
         if _memory_vector and hasattr(_memory_vector, 'healthy') and _memory_vector.healthy:
             try:
                 _memory_vector.add(full_id, new_text)
+            except Exception:
+                pass
+        # Mirror edit to Hindsight (best-effort background task)
+        if _hindsight and _hindsight.healthy:
+            try:
+                asyncio.create_task(_hindsight.retain(
+                    new_text,
+                    metadata={"source": "ai_agent_edit", "owner": owner or ""},
+                ))
             except Exception:
                 pass
 
@@ -450,6 +470,17 @@ async def do_manage_memory(content: str, session_id: Optional[str] = None, owner
             results.append(m)
             if len(results) >= 20:
                 break
+
+        # Merge Hindsight recall (dedup by text)
+        if _hindsight and _hindsight.healthy:
+            try:
+                seen_texts = {m.get("text", "").lower() for m in results}
+                for hit in _hindsight.recall(query, top_k=10):
+                    if hit["text"].lower() not in seen_texts and len(results) < 20:
+                        results.append({"text": hit["text"], "category": "hindsight"})
+                        seen_texts.add(hit["text"].lower())
+            except Exception:
+                pass
 
         if not results:
             return {"results": f"No memories found matching '{query}'."}

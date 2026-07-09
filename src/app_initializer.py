@@ -6,7 +6,8 @@ from typing import Dict, Any
 
 from src.constants import (
     DATA_DIR, PERSONAL_DIR, RUNBOOK_DIR, UPLOAD_DIR,
-    SESSIONS_FILE, DEFAULT_HOST, OPENAI_API_KEY
+    SESSIONS_FILE, DEFAULT_HOST, OPENAI_API_KEY,
+    HINDSIGHT_ENABLED, HINDSIGHT_BASE_URL, HINDSIGHT_BANK, HINDSIGHT_API_KEY,
 )
 from src.memory import MemoryManager
 from src.memory_provider import MemoryProviderRegistry, NativeMemoryProvider
@@ -76,14 +77,34 @@ def initialize_managers(base_dir: str, rag_manager=None) -> Dict[str, Any]:
         logger.warning(f"MemoryVectorStore DEGRADED: {e}")
         memory_vector = None
 
-    memory_provider_registry = MemoryProviderRegistry([
-        NativeMemoryProvider(memory_manager, memory_vector),
-    ])
+    # Hindsight memory client (optional; degrades gracefully if disabled/unreachable)
+    hindsight_client = None
+    if HINDSIGHT_ENABLED:
+        try:
+            from src.hindsight_client import HindsightClient
+            hindsight_client = HindsightClient(
+                base_url=HINDSIGHT_BASE_URL,
+                bank_id=HINDSIGHT_BANK,
+                api_key=HINDSIGHT_API_KEY,
+            )
+            logger.info("HindsightClient constructed (bank=%s, url=%s) — health check deferred to startup", HINDSIGHT_BANK, HINDSIGHT_BASE_URL)
+        except Exception as e:
+            logger.warning("Failed to construct HindsightClient (non-critical): %s", e)
+
+    providers = [NativeMemoryProvider(memory_manager, memory_vector)]
+    if hindsight_client is not None:
+        try:
+            from src.hindsight_provider import HindsightMemoryProvider
+            providers.append(HindsightMemoryProvider(hindsight_client))
+        except Exception as e:
+            logger.warning("Failed to register HindsightMemoryProvider (non-critical): %s", e)
+
+    memory_provider_registry = MemoryProviderRegistry(providers)
 
     # Initialize processors
-    chat_processor = ChatProcessor(memory_manager, personal_docs_manager, memory_vector=memory_vector, skills_manager=skills_manager)
+    chat_processor = ChatProcessor(memory_manager, personal_docs_manager, memory_vector=memory_vector, skills_manager=skills_manager, hindsight=hindsight_client)
     research_handler = ResearchHandler()
-    
+
     # Initialize chat handler with all dependencies
     chat_handler = ChatHandler(
         session_manager=session_manager,
@@ -92,6 +113,7 @@ def initialize_managers(base_dir: str, rag_manager=None) -> Dict[str, Any]:
         research_handler=research_handler,
         preset_manager=preset_manager,
         upload_handler=upload_handler,
+        hindsight=hindsight_client,
     )
     
     # Initialize model discovery
@@ -107,6 +129,7 @@ def initialize_managers(base_dir: str, rag_manager=None) -> Dict[str, Any]:
         "memory_manager": memory_manager,
         "memory_vector": memory_vector,
         "memory_provider_registry": memory_provider_registry,
+        "hindsight_client": hindsight_client,
         "skills_manager": skills_manager,
         "session_manager": session_manager,
         "upload_handler": upload_handler,

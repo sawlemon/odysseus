@@ -580,6 +580,7 @@ set_session_manager_instance(session_manager)
 app.state.session_manager = session_manager
 memory_manager    = components["memory_manager"]
 memory_vector     = components.get("memory_vector")
+hindsight_client  = components.get("hindsight_client")
 upload_handler    = components["upload_handler"]
 app.state.upload_handler = upload_handler
 personal_docs_mgr = components["personal_docs_manager"]
@@ -663,7 +664,7 @@ app.include_router(setup_admin_wipe_routes(session_manager))
 
 # Memory
 from routes.memory.memory_routes import setup_memory_routes
-memory_router = setup_memory_routes(memory_manager, session_manager, memory_vector=memory_vector)
+memory_router = setup_memory_routes(memory_manager, session_manager, memory_vector=memory_vector, hindsight=hindsight_client)
 app.include_router(memory_router)
 from routes.skills_routes import setup_skills_routes
 app.include_router(setup_skills_routes(skills_manager))
@@ -810,7 +811,7 @@ logger.info("MCP routes initialized")
 # AI Interaction tools (debates, pipelines, self-managing AI, UI control)
 from src.ai_interaction import set_session_manager as set_ai_session_manager, set_memory_manager as set_ai_memory_manager, set_rag_manager as set_ai_rag_manager
 set_ai_session_manager(session_manager)
-set_ai_memory_manager(memory_manager, memory_vector)
+set_ai_memory_manager(memory_manager, memory_vector, hindsight_client)
 set_ai_rag_manager(rag_manager, personal_docs_mgr)
 logger.info("AI interaction tools initialized (session, memory, RAG, UI control)")
 
@@ -1051,6 +1052,19 @@ async def _startup_event():
 
     _startup_tasks.append(asyncio.create_task(_startup_mcp_connections()))
 
+    # Hindsight: health check + bank creation (non-critical, non-blocking)
+    async def _startup_hindsight():
+        if hindsight_client:
+            try:
+                await hindsight_client.check_health()
+                if hindsight_client.healthy:
+                    await hindsight_client.ensure_bank()
+                    logger.info("Hindsight memory provider ready (bank=%s)", hindsight_client.bank_id)
+            except Exception as e:
+                logger.warning("Hindsight startup failed (non-critical): %s", e)
+
+    _startup_tasks.append(asyncio.create_task(_startup_hindsight()))
+
     # Startup warmups are opt-in. They make later requests a little warmer, but
     # they also compete with the first seconds of real UI use on slow or busy
     # machines. Default to clear/idle startup and let requests warm what they use.
@@ -1264,6 +1278,12 @@ async def _shutdown_event():
         await mcp_manager.disconnect_all()
     except Exception as e:
         logger.warning(f"MCP shutdown error: {e}")
+    # Close Hindsight HTTP clients
+    if hindsight_client:
+        try:
+            hindsight_client.close()
+        except Exception:
+            pass
     logger.info("Application shutdown complete")
 
 

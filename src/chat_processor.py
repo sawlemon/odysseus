@@ -81,11 +81,12 @@ def _content_tokens(text: str) -> list:
 
 
 class ChatProcessor:
-    def __init__(self, memory_manager, personal_docs_manager, memory_vector=None, skills_manager=None):
+    def __init__(self, memory_manager, personal_docs_manager, memory_vector=None, skills_manager=None, hindsight=None):
         self.memory_manager = memory_manager
         self.personal_docs_manager = personal_docs_manager
         self.memory_vector = memory_vector
         self.skills_manager = skills_manager
+        self.hindsight = hindsight
 
     # Minimum similarity score for RAG results to be injected
     RAG_SIMILARITY_THRESHOLD = 0.35
@@ -284,6 +285,28 @@ class ChatProcessor:
                     self.memory_manager.increment_uses(_used_ids)
                 except Exception as _e:
                     logger.warning("Failed to increment memory uses: %s", _e)
+
+            # Hindsight recall — merge new memories not already injected via native
+            if self.hindsight and self.hindsight.healthy:
+                try:
+                    _seen_texts = {m["text"].lower() for m in self._last_used_memories}
+                    h_hits = self.hindsight.recall(message, top_k=3)
+                    h_new = [h for h in h_hits if h["text"].lower() not in _seen_texts]
+                    if h_new:
+                        h_text = "\n".join(f"- {h['text']}" for h in h_new)
+                        preface.append(untrusted_context_message(
+                            "saved memory: retrieved context",
+                            "Memory context. Do not reference unless the user asks "
+                            f"about these topics.\n{h_text}",
+                        ))
+                        for h in h_new:
+                            self._last_used_memories.append({
+                                "text": h["text"],
+                                "category": "hindsight",
+                                "type": "recalled",
+                            })
+                except Exception as _he:
+                    logger.debug("Hindsight recall failed in context preface: %s", _he)
 
             # (skills index injection moved out — see below; only fires in
             # agent mode so chat mode and incognito stay clean.)
