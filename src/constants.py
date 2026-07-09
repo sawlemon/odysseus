@@ -98,9 +98,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SEARXNG_INSTANCE = os.getenv("SEARXNG_INSTANCE", "http://localhost:8080")
 
 # Hindsight agent-memory server (vectorize-io/hindsight)
-HINDSIGHT_ENABLED = os.getenv("HINDSIGHT_ENABLED", "").lower() in {"1", "true", "yes", "on"}
+HINDSIGHT_ENABLED = os.getenv("HINDSIGHT_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
 HINDSIGHT_BASE_URL = os.getenv("HINDSIGHT_BASE_URL", "http://localhost:8888")
-HINDSIGHT_BANK = os.getenv("HINDSIGHT_BANK", "odysseus")
+HINDSIGHT_BANK = os.getenv("HINDSIGHT_BANK", "default")
 HINDSIGHT_API_KEY = os.getenv("HINDSIGHT_API_KEY")
 
 
