@@ -441,6 +441,10 @@ Key settings:
 | `ODYSSEUS_EMAIL_COMPOSE_UPLOAD_MAX_BYTES` | `26214400` | Email compose attachment cap in bytes (25 MB). |
 | `ODYSSEUS_STT_MAX_AUDIO_BYTES` | `26214400` | Speech-to-text audio cap in bytes (25 MB). |
 | `ODYSSEUS_ICS_MAX_BYTES` | `10485760` | Calendar `.ics` import cap in bytes (10 MB). |
+| `HINDSIGHT_ENABLED` | `true` | Enable [Hindsight](https://github.com/vectorize-io/hindsight) memory mirroring for semantic recall. Native `memory.json` stays the index for the Memory UI. |
+| `HINDSIGHT_BASE_URL` | `http://localhost:8888` | Hindsight REST API base URL. Docker overrides this to `http://host.docker.internal:8888`. |
+| `HINDSIGHT_BANK` | `default` | Hindsight bank ID that stores memories. |
+| `HINDSIGHT_API_KEY` | -- | Hindsight API key. Not required for local self-hosted deployments. |
 
 All upload-limit vars are validated (must be a positive integer) and optional; an invalid value fails fast at startup.
 
