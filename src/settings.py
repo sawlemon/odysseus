@@ -156,6 +156,10 @@ DEFAULT_SETTINGS = {
     "utility_model_fallbacks": [],
     "teacher_model": "",
     "teacher_enabled": False,
+    # Hindsight long-term memory mirroring. Runtime switch checked on every
+    # retain/recall — flipping it in Settings takes effect without a restart.
+    # HINDSIGHT_ENABLED (env) still controls whether the client is built at all.
+    "hindsight_enabled": True,
     "teacher_tier2_enabled": False,
     # Skills: minimum self-reported confidence for an auto-written (LLM-authored)
     # DRAFT skill to be injected into the agent prompt. Published skills always

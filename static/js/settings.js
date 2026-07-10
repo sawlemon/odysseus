@@ -41,6 +41,7 @@ function initTabs() {
       document.body.classList.toggle('settings-appearance-open', tab === 'appearance');
       syncAppearanceOpacity(tab === 'appearance');
       if (tab === 'ai') refreshAiModelEndpoints();
+      if (tab === 'hindsight') refreshHindsightStatus();
     });
   });
 }
@@ -2342,6 +2343,93 @@ function initAll() {
   initEmailAccountsSettings();
   initReminderSettings();
   initUnifiedIntegrations();
+  initHindsightSettings();
+}
+
+/* ── Hindsight memory (enable toggle + connection health) ── */
+let refreshHindsightStatus = async () => {};
+
+function initHindsightSettings() {
+  const root = el('settings-modal');
+  if (!root || !root.querySelector('[data-settings-panel="hindsight"]')) return;
+  const toggle = el('set-hindsightEnabledToggle');
+  const refreshBtn = el('set-hindsightRefreshBtn');
+  const healthEl = el('set-hindsightHealth');
+  const urlEl = el('set-hindsightUrl');
+  const bankEl = el('set-hindsightBank');
+  const checkedEl = el('set-hindsightChecked');
+  const msgEl = el('set-hindsightMsg');
+  if (!toggle || !refreshBtn) return;
+
+  function render(st) {
+    toggle.checked = !!st.enabled;
+    if (healthEl) {
+      if (!st.configured) {
+        healthEl.textContent = '○ Not configured';
+        healthEl.style.color = 'color-mix(in srgb, var(--fg) 50%, transparent)';
+        if (msgEl) msgEl.textContent = 'Hindsight client is disabled at startup (HINDSIGHT_ENABLED=false). Set the env var and restart to use it.';
+      } else if (st.healthy) {
+        healthEl.textContent = '● Connected';
+        healthEl.style.color = 'var(--accent, #50fa7b)';
+      } else {
+        healthEl.textContent = '● Unreachable';
+        healthEl.style.color = 'var(--red, #ff5555)';
+      }
+    }
+    if (urlEl) urlEl.textContent = st.base_url || '—';
+    if (bankEl) bankEl.textContent = st.bank_id || '—';
+    if (checkedEl) checkedEl.textContent = st.last_checked ? new Date(st.last_checked * 1000).toLocaleString() : 'Never';
+  }
+
+  refreshHindsightStatus = async () => {
+    try {
+      const r = await fetch('/api/memory/hindsight/status', { credentials: 'same-origin' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      render(await r.json());
+    } catch (_) {
+      if (healthEl) {
+        healthEl.textContent = '● Status unavailable';
+        healthEl.style.color = 'var(--red, #ff5555)';
+      }
+    }
+  };
+
+  toggle.addEventListener('change', async () => {
+    const enabled = toggle.checked;
+    try {
+      const r = await fetch('/api/auth/settings', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hindsight_enabled: enabled }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (msgEl) msgEl.textContent = enabled ? 'Hindsight enabled' : 'Hindsight disabled — memories are no longer mirrored or recalled';
+    } catch (_) {
+      toggle.checked = !enabled; // revert — save failed (likely not admin)
+      if (msgEl) msgEl.textContent = 'Could not save (admin only?)';
+    }
+  });
+
+  refreshBtn.addEventListener('click', async () => {
+    refreshBtn.disabled = true;
+    const origLabel = refreshBtn.textContent;
+    refreshBtn.textContent = 'Checking…';
+    if (msgEl) msgEl.textContent = '';
+    try {
+      const r = await fetch('/api/memory/hindsight/refresh', { method: 'POST', credentials: 'same-origin' });
+      const st = await r.json();
+      if (!r.ok) throw new Error(st.detail || `HTTP ${r.status}`);
+      render(st);
+      if (msgEl) msgEl.textContent = st.healthy ? 'Connection OK' : 'Server did not respond — is Hindsight running?';
+    } catch (e) {
+      if (msgEl) msgEl.textContent = `Refresh failed: ${e.message || e}`;
+    } finally {
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = origLabel;
+    }
+  });
+
+  refreshHindsightStatus();
 }
 
 function notifyIntegrationsChanged() {
@@ -5731,6 +5819,7 @@ export function open(tab) {
   document.body.classList.toggle('settings-appearance-open', activeTab === 'appearance');
   syncAppearanceOpacity(activeTab === 'appearance');
   if (activeTab === 'ai') refreshAiModelEndpoints();
+  if (activeTab === 'hindsight') refreshHindsightStatus();
   if (ADMIN_TABS.has(activeTab) && window.adminModule && !window.adminModule._initialized) {
     window.adminModule._initData();
   }

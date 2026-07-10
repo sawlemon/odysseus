@@ -1371,6 +1371,10 @@
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <span>Search</span>
           </button>
+          <button class="settings-nav-item" data-settings-tab="hindsight">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>
+            <span>Hindsight</span>
+          </button>
           <div class="settings-sidebar-divider"></div>
           <!-- Section 2: Comms (Integrations → Email → Reminders).
                Integrations leads here because it's where the underlying
@@ -1600,6 +1604,36 @@
                 <button class="admin-btn-add" id="set-email-style-extract" style="margin-left:auto;display:inline-flex;align-items:center;gap:5px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0L14.59 8.41L23 12L14.59 15.59L12 24L9.41 15.59L1 12L9.41 8.41Z"/></svg>Extract from Sent (15 emails)</button>
                 <button class="admin-btn-add" id="set-email-style-save">Save</button>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ HINDSIGHT TAB ═══ -->
+        <div data-settings-panel="hindsight" class="hidden">
+          <div class="admin-card">
+            <h2 style="display:flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:1px;opacity:0.6;flex-shrink:0"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>Hindsight Memory<span style="flex:1"></span><label class="admin-switch" title="Enable or disable Hindsight memory"><input type="checkbox" id="set-hindsightEnabledToggle" checked><span class="admin-slider"></span></label></h2>
+            <div class="admin-toggle-sub">Long-term memory backed by a local Hindsight server. When off, nothing is stored to or recalled from Hindsight — the built-in memory system keeps working. Takes effect immediately, no restart needed.</div>
+          </div>
+          <div class="admin-card">
+            <h2 style="display:flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:1px;opacity:0.6;flex-shrink:0"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Connection<span style="flex:1"></span><button type="button" class="admin-btn-add" id="set-hindsightRefreshBtn" title="Re-check connectivity to the Hindsight server">Refresh connection</button></h2>
+            <div class="settings-col" style="margin-top:8px">
+              <div class="settings-row">
+                <label class="settings-label">Status</label>
+                <span id="set-hindsightHealth" style="font-size:12px;font-weight:600;">Checking…</span>
+              </div>
+              <div class="settings-row">
+                <label class="settings-label">Server</label>
+                <span id="set-hindsightUrl" style="font-size:12px;font-family:monospace;opacity:0.8;">—</span>
+              </div>
+              <div class="settings-row">
+                <label class="settings-label">Bank</label>
+                <span id="set-hindsightBank" style="font-size:12px;font-family:monospace;opacity:0.8;">—</span>
+              </div>
+              <div class="settings-row">
+                <label class="settings-label">Last check</label>
+                <span id="set-hindsightChecked" style="font-size:12px;opacity:0.8;">—</span>
+              </div>
+              <div id="set-hindsightMsg" style="font-size:11px;color:color-mix(in srgb, var(--fg) 45%, transparent);"></div>
             </div>
           </div>
         </div>

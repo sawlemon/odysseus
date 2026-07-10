@@ -56,6 +56,7 @@ class HindsightClient:
             self._headers["Authorization"] = f"Bearer {api_key}"
 
         self.healthy: bool = False
+        self.last_checked: Optional[float] = None  # epoch seconds of last health probe
         self._warned: bool = False
 
         self._bank_ids_cache: List[str] = []
@@ -71,6 +72,17 @@ class HindsightClient:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    @property
+    def enabled(self) -> bool:
+        """Runtime switch from Settings (hindsight_enabled). Read per call so
+        the toggle takes effect immediately — load_settings caches, so this
+        stays off the hot path's disk I/O."""
+        try:
+            from src.settings import get_setting
+            return bool(get_setting("hindsight_enabled", True))
+        except Exception:
+            return True
 
     def _get_async_client(self) -> httpx.AsyncClient:
         if self._async_client is None or self._async_client.is_closed:
@@ -175,6 +187,7 @@ class HindsightClient:
             self.healthy = resp.status_code < 500
         except Exception:
             self.healthy = False
+        self.last_checked = time.time()
         if not self.healthy and not self._warned:
             logger.warning(
                 "Hindsight unavailable at %s — memory mirroring disabled "
@@ -225,7 +238,7 @@ class HindsightClient:
         timestamp: Optional[str] = None,
     ) -> bool:
         """Store a memory in the bank chosen by the utility model. Fire via asyncio.create_task()."""
-        if not self.healthy:
+        if not self.healthy or not self.enabled:
             return False
         bank_id = await self._select_bank_for_write(text, owner)
         item: Dict[str, Any] = {"content": text}
@@ -249,7 +262,7 @@ class HindsightClient:
 
     def recall(self, query: str, *, top_k: int = 5, owner: Optional[str] = None) -> List[Dict[str, Any]]:
         """Search the bank(s) chosen by the utility model and merge results."""
-        if not self.healthy:
+        if not self.healthy or not self.enabled:
             return []
         bank_ids = self._select_banks_for_read(query, owner)
         seen: set = set()
@@ -275,7 +288,7 @@ class HindsightClient:
 
     async def reflect(self, query: str, *, owner: Optional[str] = None) -> Optional[str]:
         """Synthesize memories via Hindsight reflect. Uses the utility-model-selected bank."""
-        if not self.healthy:
+        if not self.healthy or not self.enabled:
             return None
         bank_id = await self._select_bank_for_write(query, owner)
         try:

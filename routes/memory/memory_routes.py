@@ -67,6 +67,42 @@ def setup_memory_routes(memory_manager: MemoryManager, session_manager: SessionM
         if memory.get("owner") != user:
             raise HTTPException(404, "Memory not found")
 
+    def _hindsight_status() -> Dict[str, Any]:
+        from src.settings import get_setting
+        status: Dict[str, Any] = {
+            "configured": hindsight is not None,
+            "enabled": bool(get_setting("hindsight_enabled", True)),
+            "healthy": False,
+            "base_url": None,
+            "bank_id": None,
+            "last_checked": None,
+        }
+        if hindsight is not None:
+            status.update({
+                "healthy": bool(hindsight.healthy),
+                "base_url": hindsight.base_url,
+                "bank_id": hindsight.bank_id,
+                "last_checked": hindsight.last_checked,
+            })
+        return status
+
+    @router.get("/hindsight/status")
+    def api_hindsight_status(request: Request):
+        """Current Hindsight connectivity + enabled state for the Settings panel."""
+        require_user(request)
+        return _hindsight_status()
+
+    @router.post("/hindsight/refresh")
+    async def api_hindsight_refresh(request: Request):
+        """Re-probe the Hindsight server and re-ensure the bank exists."""
+        require_user(request)
+        if hindsight is None:
+            raise HTTPException(400, "Hindsight is not configured (HINDSIGHT_ENABLED=false)")
+        await hindsight.check_health()
+        if hindsight.healthy:
+            await hindsight.ensure_bank()
+        return _hindsight_status()
+
     @router.post("/debug")
     def debug_memory_relevance(request: Request, query: str = Form(...)):
         """Debug which memories would be triggered for a query"""
