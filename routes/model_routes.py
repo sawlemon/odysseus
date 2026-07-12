@@ -30,6 +30,7 @@ from src.endpoint_resolver import (
     build_headers,
 )
 from src.auth_helpers import _auth_disabled, effective_user, owner_filter
+from src.pdf_capabilities import supports_native_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -1430,6 +1431,10 @@ def setup_model_routes(model_discovery):
                     "models_display": [_model_display_name(mid) for mid in curated],
                     "models_extra": extra,
                     "models_extra_display": [_model_display_name(mid) for mid in extra],
+                    # Parallel bool arrays: model accepts native PDF file input
+                    # (from OpenRouter's public catalog, cached in-process).
+                    "models_pdf": [supports_native_pdf(mid) for mid in curated],
+                    "models_extra_pdf": [supports_native_pdf(mid) for mid in extra],
                     "endpoint_id": ep.id,
                     "endpoint_name": ep.name,
                     "category": category,

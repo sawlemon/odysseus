@@ -44,6 +44,15 @@ DEFAULT_SETTINGS = {
     "vision_enabled": True,
     # Ordered fallback chain for the Vision model (image analysis, OCR, tagging).
     "vision_model_fallbacks": [],
+    # Send attached PDFs natively (base64 file block) to providers that accept
+    # them (OpenRouter, Anthropic); other providers get extracted text only.
+    "pdf_passthrough_enabled": True,
+    # OpenRouter file-parser engine: "native" (model reads pages itself),
+    # "mistral-ocr" (paid OCR), or "pdf-text" (free text-layer only).
+    "pdf_passthrough_engine": "native",
+    # PDFs larger than this fall back to text extraction only (Anthropic caps
+    # requests at 32 MB / 100 pages).
+    "pdf_passthrough_max_mb": 10,
     # Public base URL used to build clickable deep-links in outgoing alerts
     # (e.g., urgency alert email). Example: "https://chat.example.com"
     "app_public_url": "",

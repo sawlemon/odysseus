@@ -45,6 +45,7 @@ Native installs, GPU notes, Windows/macOS instructions, HTTPS, and configuration
 - **Deep Research** — multi-step web research with source reading and report generation.
 - **Compare** — blind side-by-side model testing and synthesis.
 - **Documents** — writing-first editor with AI edits, suggestions, Markdown, HTML, CSV, and syntax highlighting.
+- **PDF understanding** — scanned/image PDFs are sent natively to PDF-capable models (OpenRouter file-parser, Anthropic documents) with a local PyMuPDF + vision-model OCR fallback; the model picker badges and filters models that read PDFs natively.
 - **Email** — IMAP/SMTP inbox with triage, tags, summaries, reminders, and reply drafts.
 - **Notes, Tasks + Calendar** — reminders, todos, scheduled agent tasks, and CalDAV sync.
 - **Extras** — gallery/image editor, themes, uploads, web search, presets, sessions, and 2FA.

@@ -808,6 +808,9 @@ async function initVisionSettings() {
   const vlSel = el('set-vlModelSelect');
   const msg = el('set-visionSettingsMsg');
   const enabledToggle = el('set-visionEnabledToggle');
+  const pdfToggle = el('set-pdfPassthroughToggle');
+  const pdfEngineSel = el('set-pdfEngine');
+  const pdfMaxMb = el('set-pdfMaxMb');
   const configWrap = vlSel ? vlSel.closest('div[style*="flex-direction"]') : null;
   var _visionEndpoints = [];
   var visionFallbackWidget = null;
@@ -843,6 +846,9 @@ async function initVisionSettings() {
     if (settings.vision_model) vlSel.value = settings.vision_model;
     _syncModelLogo(vlSel);
     if (enabledToggle) enabledToggle.checked = settings.vision_enabled !== false;
+    if (pdfToggle) pdfToggle.checked = settings.pdf_passthrough_enabled !== false;
+    if (pdfEngineSel && settings.pdf_passthrough_engine) pdfEngineSel.value = settings.pdf_passthrough_engine;
+    if (pdfMaxMb) pdfMaxMb.value = settings.pdf_passthrough_max_mb != null ? settings.pdf_passthrough_max_mb : 10;
     visionFallbackWidget = _bindFallbackWidget({
       containerId: 'set-visionFallbacks',
       addBtnId: 'set-visionAddFallback',
@@ -868,12 +874,21 @@ async function initVisionSettings() {
   async function saveSettings() {
     try {
       await fetch('/api/auth/settings', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vision_enabled: enabledToggle ? enabledToggle.checked : true, vision_model: vlSel.value }) });
+        body: JSON.stringify({
+          vision_enabled: enabledToggle ? enabledToggle.checked : true,
+          vision_model: vlSel.value,
+          pdf_passthrough_enabled: pdfToggle ? pdfToggle.checked : true,
+          pdf_passthrough_engine: pdfEngineSel ? pdfEngineSel.value : 'native',
+          pdf_passthrough_max_mb: pdfMaxMb ? (parseInt(pdfMaxMb.value, 10) || 10) : 10,
+        }) });
       msg.textContent = 'Saved'; msg.style.color = 'var(--fg)'; setTimeout(() => { msg.textContent = ''; }, 2000);
     } catch (e) { msg.textContent = 'Failed to save'; msg.style.color = 'var(--red)'; }
   }
   vlSel.addEventListener('change', saveSettings);
   if (enabledToggle) enabledToggle.addEventListener('change', function() { syncVisionDisabled(); saveSettings(); });
+  if (pdfToggle) pdfToggle.addEventListener('change', saveSettings);
+  if (pdfEngineSel) pdfEngineSel.addEventListener('change', saveSettings);
+  if (pdfMaxMb) pdfMaxMb.addEventListener('change', saveSettings);
 
   _registerAiEndpointRefresh(function(endpoints) {
     _visionEndpoints = endpoints;

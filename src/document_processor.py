@@ -109,24 +109,103 @@ def _process_text_file(path: str) -> str:
         return result
 
 
+_MAX_VL_RENDERED_PAGES = 5
+
+_fitz_module = None
+_fitz_checked = False
+
+
+def _get_fitz():
+    """Return the optional PyMuPDF module, or None when not installed (memoized)."""
+    global _fitz_module, _fitz_checked
+    if not _fitz_checked:
+        _fitz_checked = True
+        try:
+            import fitz  # PyMuPDF, optional (AGPL-3.0 — see requirements-optional.txt)
+            _fitz_module = fitz
+        except ImportError:
+            _fitz_module = None
+    return _fitz_module
+
+
+def _render_pdf_page_png(path: str, page_index: int, dpi: int = 150) -> str | None:
+    """Render one PDF page to a temp PNG via PyMuPDF; caller unlinks the file.
+
+    Returns None when rendering fails (distinct from PyMuPDF being absent,
+    which callers detect via _get_fitz()).
+    """
+    fitz = _get_fitz()
+    if fitz is None:
+        return None
+    try:
+        with fitz.open(path) as doc:
+            page = doc[page_index]
+            pix = page.get_pixmap(matrix=fitz.Matrix(dpi / 72, dpi / 72))
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                out_path = tmp.name
+            pix.save(out_path)
+            return out_path
+    except Exception as e:
+        logger.warning(f"PDF page render failed (page {page_index + 1}): {e}")
+        return None
+
+
+def _vision_ready(owner: str | None = None) -> bool:
+    """True when vision is enabled and a VL model resolves — checked once per PDF."""
+    settings = _load_vl_settings()
+    if not settings.get("vision_enabled", True):
+        return False
+    try:
+        _resolve_vl_model(settings.get("vision_model", ""), owner=owner)
+        return True
+    except Exception:
+        return False
+
+
 def _process_pdf(path: str, owner: str | None = None) -> str:
     """Process PDF file with text extraction (pypdf). Uses VL model for image-heavy pages."""
     try:
         from pypdf import PdfReader
         pdf_text = ""
         reader = PdfReader(path)
+        vision_ok = _vision_ready(owner)
+        fitz_mod = _get_fitz()
+        rendered_pages = 0
 
         for page_num, page in enumerate(reader.pages):
             page_text = (page.extract_text() or "").strip()
             if page_text:
                 pdf_text += f"\n\n[Page {page_num + 1} text]:\n{page_text}"
 
-            # For pages with images but little text, try VL model
+            if len(page_text) >= 50 or not vision_ok:
+                continue
+
+            # Low-text page: likely scanned. Prefer a full-page render — robust
+            # to any embedded image encoding pypdf can't decode.
+            if fitz_mod is not None:
+                if rendered_pages >= _MAX_VL_RENDERED_PAGES:
+                    continue
+                png_path = _render_pdf_page_png(path, page_num)
+                if png_path:
+                    rendered_pages += 1
+                    try:
+                        ocr_text = analyze_image_with_vl(png_path, owner=owner)
+                        # VL error banners are bracketed — don't inject them as content.
+                        if ocr_text and not ocr_text.startswith("["):
+                            pdf_text += f"\n\n[Page {page_num + 1} (rendered) text]: {ocr_text}"
+                    finally:
+                        try:
+                            os.unlink(png_path)
+                        except OSError:
+                            pass
+                continue
+
+            # PyMuPDF unavailable: fall back to pypdf embedded-image extraction.
             try:
                 images = list(page.images)
             except Exception:
                 images = []
-            if images and len(page_text) < 50:
+            if images:
                 for img_index, img in enumerate(images[:3]):  # cap at 3 images per page
                     try:
                         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
@@ -134,7 +213,7 @@ def _process_pdf(path: str, owner: str | None = None) -> str:
                         try:
                             img.image.save(temp_img_path, "PNG")  # pypdf -> PIL image
                             ocr_text = analyze_image_with_vl(temp_img_path, owner=owner)
-                            if ocr_text and "unavailable" not in ocr_text.lower():
+                            if ocr_text and not ocr_text.startswith("["):
                                 pdf_text += f"\n\n[Page {page_num + 1} image {img_index + 1} text]: {ocr_text}"
                         finally:
                             try:
@@ -301,6 +380,41 @@ def _load_vl_settings() -> dict:
         return load_settings()
     except Exception:
         return {}
+
+
+def _pdf_file_block(path: str, display_name: str, upload_info: Dict[str, Any]) -> Dict[str, Any] | None:
+    """Build an OpenRouter-shaped ``file`` content block for native PDF pass-through.
+
+    Providers that accept files (OpenRouter, Anthropic) receive the PDF itself so
+    the model can read scanned/image pages directly; llm_core adapts or strips
+    the block per provider. Returns None when disabled, oversize, or on any
+    failure — the locally extracted text is always the safety net.
+    """
+    try:
+        settings = _load_vl_settings()
+        if not settings.get("pdf_passthrough_enabled", True):
+            return None
+        max_mb = settings.get("pdf_passthrough_max_mb", 10)
+        try:
+            max_bytes = float(max_mb) * 1024 * 1024
+        except (TypeError, ValueError):
+            max_bytes = 10 * 1024 * 1024
+        size = upload_info.get("size") or os.path.getsize(path)
+        if size > max_bytes:
+            logger.info(f"PDF {display_name} ({size} bytes) exceeds pass-through cap; extraction only")
+            return None
+        with open(path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("utf-8")
+        return {
+            "type": "file",
+            "file": {
+                "filename": os.path.basename(display_name or "document.pdf"),
+                "file_data": f"data:application/pdf;base64,{b64}",
+            },
+        }
+    except Exception as e:
+        logger.warning(f"PDF pass-through block failed for {display_name}: {e}")
+        return None
 
 
 def _resolve_vl_model(configured: str, owner: str | None = None) -> tuple:
@@ -570,6 +684,9 @@ def build_user_content(
                         logger.warning(f"PDF auto-doc creation failed for {path}: {e}")
                 if extracted_text is None:
                     extracted_text = _process_pdf(path, owner=owner)
+                file_block = _pdf_file_block(path, display_name, upload_info)
+                if file_block:
+                    content.append(file_block)
             elif mime.startswith("text/") or _is_text_file(path):
                 extracted_text = _process_text_file(path)
             else:
@@ -596,7 +713,7 @@ def build_user_content(
             else:
                 content.insert(0, {"type": "text", "text": "[Attached non-text file]"})
 
-    has_media = any(item.get("type") in ["image_url", "audio"] for item in content if isinstance(item, dict))
+    has_media = any(item.get("type") in ["image_url", "audio", "file"] for item in content if isinstance(item, dict))
     if not has_media and content:
         combined_text = ""
         for item in content:

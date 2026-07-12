@@ -1280,11 +1280,76 @@ def _convert_openai_content_to_anthropic(content):
                     "type": "image",
                     "source": {"type": "url", "url": url},
                 })
+        elif block.get("type") == "file":
+            # OpenRouter-shaped PDF pass-through block → Anthropic document block.
+            file_data = (block.get("file") or {}).get("file_data", "")
+            if file_data.startswith("data:"):
+                try:
+                    header, b64_data = file_data.split(",", 1)
+                    media_type = header.split(";")[0].replace("data:", "")
+                except (ValueError, IndexError):
+                    continue
+                converted.append({
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": media_type or "application/pdf",
+                        "data": b64_data,
+                    },
+                })
+            # Non-data URIs unsupported here — drop rather than 400 upstream.
         elif block.get("type") == "text":
             converted.append(block)
         else:
             converted.append(block)
     return converted
+
+
+_OPENROUTER_PDF_ENGINES = {"native", "mistral-ocr", "pdf-text"}
+
+
+def _messages_have_file_blocks(messages) -> bool:
+    """True when any message carries a pass-through ``file`` content block."""
+    for m in messages or []:
+        content = m.get("content") if isinstance(m, dict) else None
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "file":
+                    return True
+    return False
+
+
+def _strip_file_blocks(messages):
+    """Remove ``file`` content blocks for providers that can't accept them.
+
+    Shallow-copies only the affected messages; extracted PDF text already lives
+    in the text block, so nothing is lost besides the raw file.
+    """
+    out = []
+    for m in messages or []:
+        content = m.get("content") if isinstance(m, dict) else None
+        if isinstance(content, list) and any(
+            isinstance(b, dict) and b.get("type") == "file" for b in content
+        ):
+            m = dict(m)
+            m["content"] = [
+                b for b in content
+                if not (isinstance(b, dict) and b.get("type") == "file")
+            ]
+        out.append(m)
+    return out
+
+
+def _openrouter_pdf_plugins() -> list:
+    """OpenRouter file-parser plugin config for PDF file blocks."""
+    try:
+        from src.settings import get_setting
+        engine = get_setting("pdf_passthrough_engine", "native")
+    except Exception:
+        engine = "native"
+    if engine not in _OPENROUTER_PDF_ENGINES:
+        engine = "native"
+    return [{"id": "file-parser", "pdf": {"engine": engine}}]
 
 
 def _build_anthropic_payload(model, messages, temperature, max_tokens, stream=False, tools=None):
@@ -1795,6 +1860,11 @@ def llm_call(url: str, model: str, messages: List[Dict], temperature: float = LL
         _apply_local_generation_stability(payload, target_url, model)
         if provider == "mistral" and _supports_thinking(model):
             payload["reasoning_effort"] = _MISTRAL_REASONING_EFFORT
+        if _messages_have_file_blocks(messages_copy):
+            if provider == "openrouter":
+                payload["plugins"] = _openrouter_pdf_plugins()
+            else:
+                payload["messages"] = _strip_file_blocks(messages_copy)
     try:
         note_model_activity(target_url, model)
         r = httpx_post_kimi_aware(target_url, h, json=payload, timeout=timeout)
@@ -2007,6 +2077,11 @@ async def llm_call_async(
             payload["reasoning_effort"] = _MISTRAL_REASONING_EFFORT
         _apply_local_cache_affinity(payload, url, session_id)
         _apply_local_generation_stability(payload, target_url, model)
+        if _messages_have_file_blocks(messages_copy):
+            if provider == "openrouter":
+                payload["plugins"] = _openrouter_pdf_plugins()
+            else:
+                payload["messages"] = _strip_file_blocks(messages_copy)
 
     if _is_host_dead(target_url):
         raise HTTPException(503, f"Upstream {_host_key(target_url)} marked unreachable (cooldown active)")
@@ -2142,7 +2217,7 @@ async def _stream_llm_inner(url: str, model: str, messages: List[Dict], temperat
     elif provider == "chatgpt-subscription":
         target_url = _normalize_chatgpt_subscription_url(url)
         h = _provider_headers(provider, headers)
-        payload = _build_chatgpt_responses_payload(model, messages_copy, temperature, max_tokens, stream=True)
+        payload = _build_chatgpt_responses_payload(model, _strip_file_blocks(messages_copy), temperature, max_tokens, stream=True)
     else:
         target_url = _normalize_openai_chat_url(url)
         payload = {
@@ -2175,6 +2250,11 @@ async def _stream_llm_inner(url: str, model: str, messages: List[Dict], temperat
             payload["think"] = False
         _apply_local_cache_affinity(payload, url, session_id)
         _apply_local_generation_stability(payload, target_url, model)
+        if _messages_have_file_blocks(messages_copy):
+            if provider == "openrouter":
+                payload["plugins"] = _openrouter_pdf_plugins()
+            else:
+                payload["messages"] = _strip_file_blocks(messages_copy)
         h = _provider_headers(provider, headers)
         if provider == "copilot":
             from src.copilot import apply_request_headers
