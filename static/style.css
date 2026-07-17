@@ -39696,6 +39696,578 @@ body.theme-frosted .modal {
   background: color-mix(in srgb, #000 12%, transparent) !important;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   macOS 27 Liquid Glass theme — Apple HIG Liquid Glass spec.
+   Ref: developer.apple.com/documentation/TechnologyOverviews/adopting-liquid-glass
+
+   Principles enforced:
+   1. Glass = topmost NAVIGATION layer only (sidebars, modals, popovers, bars,
+      input bar). Content cards are NOT glass — they sit ON the glass.
+   2. CONCENTRIC corners — nested shapes round relative to container.
+      Outer(window/modal)=20px → panel/pane=16px → card=14px → input=12px →
+      button=10px → chip=8px → badge=6px. No sharp 90° corners anywhere.
+   3. NO glass-on-glass layering — inner elements get transparent bg + hairline
+      only, never their own backdrop-filter (Apple explicit anti-pattern).
+   4. Specular top-edge highlight on every glass surface (light refraction).
+   5. Hairline white border = glass edge catching light.
+   6. Soft floating shadow + bottom dark inset = lensing (light bending).
+   7. Vibrancy: blur + saturate + brightness for adaptive translucency.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* ── Concentric corner system (CSS vars, scoped to liquidglass) ── */
+body.theme-liquidglass {
+  --lg-radius-window: 20px;   /* modals, top-level floating surfaces */
+  --lg-radius-panel: 20px;    /* sidebar, panes, popovers */
+  --lg-radius-card: 14px;     /* content cards, chat bubbles */
+  --lg-radius-input: 12px;    /* inputs, search fields */
+  --lg-radius-button: 10px;   /* buttons, send, toggles */
+  --lg-radius-chip: 8px;      /* chips, badges, small controls, tabs */
+  --lg-radius-small: 6px;     /* tiny badges, status dots */
+  /* Light neutral desktop wallpaper so glass has something to refract */
+  background-color: #e8eaed !important;
+  background-image:
+    radial-gradient(ellipse at 20% 10%, rgba(0,122,255,0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 85% 90%, rgba(175,82,222,0.05) 0%, transparent 50%) !important;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   FLOATING LAYOUT — Apple Podcasts aesthetic. Panels detach from viewport
+   edges with padding + gap so glass surfaces float with rounded corners all
+   around. Scoped to liquidglass only; other themes keep flush layout.
+   ════════════════════════════════════════════════════════════════════════ */
+body.theme-liquidglass {
+  /* Gap around the whole app + between flex children */
+  padding: 8px !important;
+  gap: 8px !important;
+}
+/* Sidebar floats — rounded on ALL corners (not just right), margin from edge */
+body.theme-liquidglass #sidebar,
+body.theme-liquidglass .sidebar {
+  border-radius: var(--lg-radius-panel) !important;
+  margin-left: 6px !important;
+}
+/* Icon rail floats — rounded all corners */
+body.theme-liquidglass .icon-rail {
+  border-radius: var(--lg-radius-chip) !important;
+  border-right: 1px solid color-mix(in srgb, var(--fg) 6%, transparent) !important;
+}
+/* Chat area floats above bottom edge so input bar doesn't hug viewport */
+body.theme-liquidglass .chat-container {
+  margin-bottom: 8px !important;
+}
+/* Chat input bar already has 22px radius; ensure it floats within chat-container */
+body.theme-liquidglass .chat-input-bar {
+  margin-bottom: 0 !important;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   GLASS SURFACES — navigation/structural layer (Apple: "topmost layer")
+   Only these get backdrop-filter. Everything else sits ON them.
+   ════════════════════════════════════════════════════════════════════════ */
+body.theme-liquidglass.theme-frosted #sidebar,
+body.theme-liquidglass.theme-frosted .modal-content,
+body.theme-liquidglass.theme-frosted .doclib-modal-content,
+body.theme-liquidglass.theme-frosted .gallery-modal-content,
+body.theme-liquidglass.theme-frosted .notes-pane,
+body.theme-liquidglass.theme-frosted .research-pane,
+body.theme-liquidglass.theme-frosted .calendar-pane,
+body.theme-liquidglass.theme-frosted .cookbook-pane,
+body.theme-liquidglass.theme-frosted .doc-pane,
+body.theme-liquidglass.theme-frosted .doc-pane-floating,
+body.theme-liquidglass.theme-frosted .cp-popover,
+body.theme-liquidglass.theme-frosted .dropdown,
+body.theme-liquidglass.theme-frosted .overflow-menu,
+body.theme-liquidglass.theme-frosted .doc-tab-dropdown,
+body.theme-liquidglass.theme-frosted .email-reader,
+body.theme-liquidglass.theme-frosted .gallery-detail-menu,
+body.theme-liquidglass.theme-frosted #theme-popup .modal-content {
+  /* Vibrancy: strong blur + saturation, NO brightness boost (keeps it clean) */
+  backdrop-filter: blur(40px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(180%) !important;
+  /* Clean tinted glass — subtle, not glowing. Podcasts uses near-flat tint. */
+  background-color: color-mix(in srgb, var(--panel) 72%, transparent) !important;
+  background-image: none !important;
+  /* Subtle hairline — soft gray, not stark white (Apple uses muted edges) */
+  border: 1px solid color-mix(in srgb, var(--fg) 8%, transparent) !important;
+  /* Continuous corners — concentric to window */
+  border-radius: var(--lg-radius-panel) !important;
+  /* Barely-there shadow — Apple Podcasts panels float with minimal depth.
+     Single soft layer, low opacity. No heavy stacked shadows. */
+  box-shadow:
+    0 1px 3px rgba(0,0,0,0.04),
+    0 4px 12px rgba(0,0,0,0.03) !important;
+}
+
+/* Top-level modals/floating panes = window radius (largest, concentric outer) */
+body.theme-liquidglass.theme-frosted .modal-content,
+body.theme-liquidglass.theme-frosted .doclib-modal-content,
+body.theme-liquidglass.theme-frosted .gallery-modal-content,
+body.theme-liquidglass.theme-frosted #theme-popup .modal-content {
+  border-radius: var(--lg-radius-window) !important;
+}
+
+/* Sidebar — continuous corner on right edge (nests against window) */
+body.theme-liquidglass.theme-frosted #sidebar {
+  border-radius: var(--lg-radius-panel) !important;
+}
+
+/* Icon rail — slim glass column, rounded all corners (floats) */
+body.theme-liquidglass.theme-frosted .icon-rail {
+  background-color: color-mix(in srgb, var(--panel) 72%, transparent) !important;
+  backdrop-filter: blur(40px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(180%) !important;
+  border: 1px solid color-mix(in srgb, var(--fg) 6%, transparent) !important;
+  border-radius: var(--lg-radius-chip) !important;
+  box-shadow: none !important;
+}
+
+/* Chat input bar — floating glass (nav layer) */
+body.theme-liquidglass .chat-input-bar {
+  backdrop-filter: blur(40px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(180%) !important;
+  background-color: color-mix(in srgb, var(--panel) 72%, transparent) !important;
+  background-image: none !important;
+  border: 1px solid color-mix(in srgb, var(--fg) 8%, transparent) !important;
+  /* Prominent floating composer — larger continuous corner (concentric outer
+     to the inner textarea/buttons). Apple chat composers use generous radii. */
+  border-radius: 22px !important;
+  box-shadow:
+    0 1px 3px rgba(0,0,0,0.04),
+    0 4px 12px rgba(0,0,0,0.03) !important;
+}
+
+/* Sticky modal headers — glass bar (nav layer), not opaque */
+body.theme-liquidglass.theme-frosted .modal-header {
+  backdrop-filter: blur(40px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(180%) !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--fg) 6%, transparent) !important;
+  border-radius: var(--lg-radius-window) var(--lg-radius-window) 0 0 !important;
+}
+
+/* Sidebar header + user bar — blend into glass sidebar (transparent) */
+body.theme-liquidglass.theme-frosted .sidebar-header,
+body.theme-liquidglass.theme-frosted .sidebar-user-bar {
+  background: transparent !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--fg) 5%, transparent) !important;
+}
+
+/* Modal backdrop — lighter so vibrancy reads through */
+body.theme-liquidglass.theme-frosted .modal {
+  background: color-mix(in srgb, #000 8%, transparent) !important;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   CONTENT LAYER — sits ON glass, is NOT glass itself (no backdrop-filter).
+   Apple: "Avoid layering Liquid Glass elements on each other."
+   Transparent bg + hairline border + continuous corners only.
+   ════════════════════════════════════════════════════════════════════════ */
+body.theme-liquidglass .admin-card,
+body.theme-liquidglass .modal-content .admin-card,
+body.theme-liquidglass .doclib-modal-content .admin-card,
+body.theme-liquidglass .gallery-modal-content .admin-card,
+body.theme-liquidglass #theme-popup .admin-card {
+  background-color: color-mix(in srgb, var(--panel) 50%, transparent) !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid color-mix(in srgb, var(--fg) 6%, transparent) !important;
+  border-radius: var(--lg-radius-card) !important;
+  box-shadow: none !important;
+}
+
+/* Chat bubbles — flat content cards, no heavy shadow (Podcasts aesthetic) */
+body.theme-liquidglass .msg .body {
+  border-radius: var(--lg-radius-card) !important;
+  box-shadow: none !important;
+}
+body.theme-liquidglass .msg.user .body {
+  background-color: color-mix(in srgb, var(--panel) 60%, transparent) !important;
+  background-image: none !important;
+  border: 1px solid color-mix(in srgb, var(--fg) 6%, transparent) !important;
+}
+body.theme-liquidglass .msg.ai .body {
+  background-color: color-mix(in srgb, var(--panel) 40%, transparent) !important;
+  background-image: none !important;
+  border: 1px solid color-mix(in srgb, var(--fg) 5%, transparent) !important;
+}
+
+/* Code blocks — inset card (NO glass) */
+body.theme-liquidglass pre,
+body.theme-liquidglass .code-block,
+body.theme-liquidglass .hljs {
+  border-radius: var(--lg-radius-button) !important;
+  border: 1px solid color-mix(in srgb, var(--fg) 6%, transparent) !important;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   CONTROLS — continuous corners everywhere (concentric to cards/panels).
+   NO backdrop-filter (controls sit on glass, aren't glass themselves).
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Primary buttons ── */
+body.theme-liquidglass .send-btn {
+  border-radius: var(--lg-radius-button) !important;
+  box-shadow: none !important;
+}
+body.theme-liquidglass .chat-new-btn,
+body.theme-liquidglass .user-bar-btn,
+body.theme-liquidglass .hamburger-btn,
+body.theme-liquidglass .export-dl-btn,
+body.theme-liquidglass .modal-minimize-btn,
+body.theme-liquidglass .confirm-btn-primary,
+body.theme-liquidglass .confirm-btn-danger,
+body.theme-liquidglass .task-btn-danger,
+body.theme-liquidglass .doclib-card-action-btn,
+body.theme-liquidglass .prompt-template-card,
+body.theme-liquidglass .memory-toolbar-btn,
+body.theme-liquidglass .reader-icon-btn,
+body.theme-liquidglass .input-icon-btn,
+body.theme-liquidglass .compare-rematch-btn,
+body.theme-liquidglass .diff-toolbar-btn-accept {
+  border-radius: var(--lg-radius-button) !important;
+}
+
+/* ── Hamburger — tuck into sidebar's top-left, glass pill (seamless) ──
+   Default is fixed/floating outside the sidebar which looks odd over the
+   floating glass. Under liquidglass: sit it inside the sidebar's glass
+   surface with a subtle tinted pill so it reads as part of the sidebar. */
+body.theme-liquidglass .hamburger-btn {
+  top: 8px;
+  left: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--lg-radius-button) !important;
+  background-color: color-mix(in srgb, var(--panel) 50%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--fg) 6%, transparent) !important;
+  opacity: 0.75;
+  backdrop-filter: blur(8px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(150%) !important;
+}
+body.theme-liquidglass .hamburger-btn:hover {
+  opacity: 1;
+  background-color: color-mix(in srgb, var(--fg) 10%, transparent) !important;
+}
+body.theme-liquidglass body.hamburger-right .hamburger-btn {
+  left: auto;
+  right: 8px;
+}
+
+/* ── Icon rail buttons — pill/concentric ── */
+body.theme-liquidglass .icon-rail-btn {
+  border-radius: var(--lg-radius-chip) !important;
+}
+
+/* ── Minimized dock chips ── */
+body.theme-liquidglass .minimized-dock-chip {
+  border-radius: var(--lg-radius-chip) !important;
+}
+
+/* ── Inputs, textareas, selects, search fields ── */
+body.theme-liquidglass input[type="text"],
+body.theme-liquidglass input[type="password"],
+body.theme-liquidglass input[type="email"],
+body.theme-liquidglass input[type="search"],
+body.theme-liquidglass input[type="number"],
+body.theme-liquidglass input[type="url"],
+body.theme-liquidglass textarea,
+body.theme-liquidglass select,
+body.theme-liquidglass .session-select-cb,
+body.theme-liquidglass .model-picker-wrap,
+body.theme-liquidglass .chat-input-top,
+body.theme-liquidglass .chat-input-bottom,
+body.theme-liquidglass .chat-input-left,
+body.theme-liquidglass .chat-input-right {
+  border-radius: var(--lg-radius-input) !important;
+}
+
+/* ── Chips, badges, tags, pills ── */
+body.theme-liquidglass .endpoint-offline-badge,
+body.theme-liquidglass .rail-notes-badge,
+body.theme-liquidglass .models-row-offline,
+body.theme-liquidglass .note-color-red,
+body.theme-liquidglass .note-color-orange,
+body.theme-liquidglass .note-color-yellow,
+body.theme-liquidglass .note-color-green,
+body.theme-liquidglass .note-color-blue,
+body.theme-liquidglass .note-color-purple,
+body.theme-liquidglass .task-log-status-aborted,
+body.theme-liquidglass .tasks-af-chip-error,
+body.theme-liquidglass .cookbook-slot-saved,
+body.theme-liquidglass .cookbook-task-crashed,
+body.theme-liquidglass .cookbook-notif-active {
+  border-radius: var(--lg-radius-chip) !important;
+}
+
+/* ── Dropdowns, popovers, menus (already glass; ensure concentric) ── */
+body.theme-liquidglass .dropdown,
+body.theme-liquidglass .cp-popover,
+body.theme-liquidglass .overflow-menu,
+body.theme-liquidglass .doc-tab-dropdown,
+body.theme-liquidglass .ge-adj-popup {
+  border-radius: var(--lg-radius-panel) !important;
+}
+
+/* ── List items, rows, session entries — concentric to sidebar ── */
+body.theme-liquidglass .list-item,
+body.theme-liquidglass .models-row,
+body.theme-liquidglass .session-item,
+body.theme-liquidglass .sidebar-assistant-entry,
+body.theme-liquidglass .row {
+  border-radius: var(--lg-radius-chip) !important;
+}
+
+/* ── Cards (doclib, notes, compare, etc.) ── */
+body.theme-liquidglass .doclib-card-header,
+body.theme-liquidglass .note-card,
+body.theme-liquidglass .compare-probe-card,
+body.theme-liquidglass .assistant-checkins {
+  border-radius: var(--lg-radius-card) !important;
+}
+
+/* ── Email reader elements ── */
+body.theme-liquidglass .email-body,
+body.theme-liquidglass .email-folder-bar,
+body.theme-liquidglass .email-reader-tab-modal .email-reader-header,
+body.theme-liquidglass .email-reader-tab-modal .email-reader-actions,
+body.theme-liquidglass .email-reader-tab-modal .email-reader-meta {
+  border-radius: var(--lg-radius-card) !important;
+}
+
+/* ── Settings sidebar divider — keep sharp (1px line, not a surface) ── */
+/* (intentionally no radius — dividers are lines, not shapes) */
+
+/* ── Theme swatches — active gets blue ring ── */
+body.theme-liquidglass .theme-swatch,
+body.theme-liquidglass .theme-swatch.active {
+  border-radius: var(--lg-radius-chip) !important;
+}
+body.theme-liquidglass .theme-swatch.active {
+  box-shadow: 0 0 0 2px #007AFF !important;
+}
+
+/* ── Toggle switches active = macOS system blue ── */
+body.theme-liquidglass .toggle.active,
+body.theme-liquidglass .toggle-on,
+body.theme-liquidglass input[type="checkbox"].switch:checked {
+  background-color: #007AFF !important;
+  border-radius: 999px !important;
+}
+
+/* ── Links = system blue ── */
+body.theme-liquidglass a {
+  color: #007AFF !important;
+}
+
+/* ── Scrollbar — macOS overlay style ── */
+body.theme-liquidglass ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+body.theme-liquidglass ::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.18);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+body.theme-liquidglass ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,0,0,0.28);
+  background-clip: content-box;
+}
+body.theme-liquidglass ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   FALLBACK — if frosted toggle is OFF while liquidglass is ON.
+   Liquid Glass IS a glass theme; render glass via liquidglass class alone.
+   ════════════════════════════════════════════════════════════════════════ */
+body.theme-liquidglass:not(.theme-frosted) #sidebar,
+body.theme-liquidglass:not(.theme-frosted) .modal-content,
+body.theme-liquidglass:not(.theme-frosted) .notes-pane,
+body.theme-liquidglass:not(.theme-frosted) .research-pane,
+body.theme-liquidglass:not(.theme-frosted) .calendar-pane,
+body.theme-liquidglass:not(.theme-frosted) .cookbook-pane,
+body.theme-liquidglass:not(.theme-frosted) .doc-pane,
+body.theme-liquidglass:not(.theme-frosted) .doc-pane-floating,
+body.theme-liquidglass:not(.theme-frosted) .dropdown,
+body.theme-liquidglass:not(.theme-frosted) .cp-popover,
+body.theme-liquidglass:not(.theme-frosted) .overflow-menu,
+body.theme-liquidglass:not(.theme-frosted) .email-reader {
+  background-color: color-mix(in srgb, var(--panel) 72%, transparent) !important;
+  background-image: none !important;
+  backdrop-filter: blur(40px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(180%) !important;
+  border: 1px solid color-mix(in srgb, var(--fg) 8%, transparent) !important;
+  border-radius: var(--lg-radius-panel) !important;
+  box-shadow:
+    0 1px 3px rgba(0,0,0,0.04),
+    0 4px 12px rgba(0,0,0,0.03) !important;
+}
+/* Note: admin-card intentionally NOT in fallback glass list — it's content,
+   not nav. Keeps Apple's "no glass-on-glass" rule even without frosted. */
+
+/* ════════════════════════════════════════════════════════════════════════
+   DARK VARIANT — body.theme-liquidglass-dark
+   Modifier class (always paired with .theme-liquidglass). Overrides glass
+   tint, specular highlight, borders, and shadows for Apple dark-mode glass:
+   darker glass tint, dimmer white highlights, brighter dark inset.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Dark desktop wallpaper — so dark glass has something to refract */
+body.theme-liquidglass-dark {
+  background-color: #1c1c1e !important;
+  background-image:
+    radial-gradient(ellipse at 20% 10%, rgba(10,132,255,0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 85% 90%, rgba(191,90,242,0.06) 0%, transparent 50%) !important;
+  /* Floating layout — inherits padding/gap from body.theme-liquidglass */
+}
+
+/* ── Dark glass surfaces — override the light specular with dark tint ──
+   Same selectors as light, but: dark glass tint, dimmer top highlight
+   (white at low alpha), brighter bottom dark inset (lensing on dark). */
+body.theme-liquidglass-dark.theme-frosted #sidebar,
+body.theme-liquidglass-dark.theme-frosted .modal-content,
+body.theme-liquidglass-dark.theme-frosted .doclib-modal-content,
+body.theme-liquidglass-dark.theme-frosted .gallery-modal-content,
+body.theme-liquidglass-dark.theme-frosted .notes-pane,
+body.theme-liquidglass-dark.theme-frosted .research-pane,
+body.theme-liquidglass-dark.theme-frosted .calendar-pane,
+body.theme-liquidglass-dark.theme-frosted .cookbook-pane,
+body.theme-liquidglass-dark.theme-frosted .doc-pane,
+body.theme-liquidglass-dark.theme-frosted .doc-pane-floating,
+body.theme-liquidglass-dark.theme-frosted .cp-popover,
+body.theme-liquidglass-dark.theme-frosted .dropdown,
+body.theme-liquidglass-dark.theme-frosted .overflow-menu,
+body.theme-liquidglass-dark.theme-frosted .doc-tab-dropdown,
+body.theme-liquidglass-dark.theme-frosted .email-reader,
+body.theme-liquidglass-dark.theme-frosted .gallery-detail-menu,
+body.theme-liquidglass-dark.theme-frosted #theme-popup .modal-content {
+  /* Dark glass: clean tinted translucent, no gradient glow */
+  background-color: color-mix(in srgb, var(--panel) 72%, transparent) !important;
+  background-image: none !important;
+  /* Subtle hairline — dim white, not stark */
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  /* Barely-there shadow — Apple Podcasts dark mode floats gently */
+  box-shadow:
+    0 1px 3px rgba(0,0,0,0.20),
+    0 4px 12px rgba(0,0,0,0.15) !important;
+}
+
+/* Icon rail dark glass */
+body.theme-liquidglass-dark.theme-frosted .icon-rail {
+  background-color: color-mix(in srgb, var(--panel) 72%, transparent) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  box-shadow: none !important;
+}
+
+/* Chat input bar dark glass */
+body.theme-liquidglass-dark .chat-input-bar {
+  background-color: color-mix(in srgb, var(--panel) 72%, transparent) !important;
+  background-image: none !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  border-radius: 22px !important;
+  box-shadow:
+    0 1px 3px rgba(0,0,0,0.20),
+    0 4px 12px rgba(0,0,0,0.15) !important;
+}
+
+/* Sticky modal header dark glass */
+body.theme-liquidglass-dark.theme-frosted .modal-header {
+  border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+}
+
+/* Sidebar header + user bar dark */
+body.theme-liquidglass-dark.theme-frosted .sidebar-header,
+body.theme-liquidglass-dark.theme-frosted .sidebar-user-bar {
+  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+}
+
+/* Content cards dark — translucent dark tint, NO glass (no backdrop-filter) */
+body.theme-liquidglass-dark .admin-card,
+body.theme-liquidglass-dark .modal-content .admin-card,
+body.theme-liquidglass-dark .doclib-modal-content .admin-card,
+body.theme-liquidglass-dark .gallery-modal-content .admin-card,
+body.theme-liquidglass-dark #theme-popup .admin-card {
+  background-color: color-mix(in srgb, var(--panel) 50%, transparent) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  box-shadow: none !important;
+}
+
+/* Chat bubbles dark — flat, no heavy shadow */
+body.theme-liquidglass-dark .msg .body {
+  box-shadow: none !important;
+}
+body.theme-liquidglass-dark .msg.user .body {
+  background-color: color-mix(in srgb, var(--panel) 60%, transparent) !important;
+  background-image: none !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+}
+body.theme-liquidglass-dark .msg.ai .body {
+  background-color: color-mix(in srgb, var(--panel) 40%, transparent) !important;
+  background-image: none !important;
+  border: 1px solid rgba(255,255,255,0.06) !important;
+}
+
+/* Code blocks dark */
+body.theme-liquidglass-dark pre,
+body.theme-liquidglass-dark .code-block,
+body.theme-liquidglass-dark .hljs {
+  border: 1px solid rgba(255,255,255,0.08) !important;
+}
+
+/* Theme swatch active ring — dark mode system blue */
+body.theme-liquidglass-dark .theme-swatch.active {
+  box-shadow: 0 0 0 2px #0A84FF !important;
+}
+
+/* Toggles dark — system blue dark mode */
+body.theme-liquidglass-dark .toggle.active,
+body.theme-liquidglass-dark .toggle-on,
+body.theme-liquidglass-dark input[type="checkbox"].switch:checked {
+  background-color: #0A84FF !important;
+}
+
+/* Links dark — system blue dark mode */
+body.theme-liquidglass-dark a {
+  color: #0A84FF !important;
+}
+
+/* Send button dark — system blue dark mode + glow */
+body.theme-liquidglass-dark .send-btn {
+  box-shadow: none !important;
+}
+
+/* Scrollbar dark */
+body.theme-liquidglass-dark ::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.18);
+  background-clip: content-box;
+}
+body.theme-liquidglass-dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.28);
+  background-clip: content-box;
+}
+
+/* Dark fallback (frosted off) — dark glass tint */
+body.theme-liquidglass-dark:not(.theme-frosted) #sidebar,
+body.theme-liquidglass-dark:not(.theme-frosted) .modal-content,
+body.theme-liquidglass-dark:not(.theme-frosted) .notes-pane,
+body.theme-liquidglass-dark:not(.theme-frosted) .research-pane,
+body.theme-liquidglass-dark:not(.theme-frosted) .calendar-pane,
+body.theme-liquidglass-dark:not(.theme-frosted) .cookbook-pane,
+body.theme-liquidglass-dark:not(.theme-frosted) .doc-pane,
+body.theme-liquidglass-dark:not(.theme-frosted) .doc-pane-floating,
+body.theme-liquidglass-dark:not(.theme-frosted) .dropdown,
+body.theme-liquidglass-dark:not(.theme-frosted) .cp-popover,
+body.theme-liquidglass-dark:not(.theme-frosted) .overflow-menu,
+body.theme-liquidglass-dark:not(.theme-frosted) .email-reader {
+  background-color: color-mix(in srgb, var(--panel) 72%, transparent) !important;
+  background-image: none !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  box-shadow:
+    0 1px 3px rgba(0,0,0,0.20),
+    0 4px 12px rgba(0,0,0,0.15) !important;
+}
+
 /* Mobile only: lift the Dependencies "Server" dropdown's selected text up ~2px. */
 @media (max-width: 768px) {
   #hwfit-deps-server { padding-bottom: 4px; line-height: 1; }

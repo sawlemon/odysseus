@@ -29,6 +29,24 @@ export const THEMES = {
                             inputBg: '#2f2f2f', brandColor: '#ffffff', brandMixTo: '#ffffff' } },
   claude:     { bg:'#262624', fg:'#f5f4f0', panel:'#30302e', border:'#4a4a47', red:'#c6613f' },
   cute:       { bg:'#fff0f5', fg:'#d4608a', panel:'#fff8fa', border:'#f0c0d0', red:'#ff6b9d' },
+  // macOS 27 Liquid Glass — native system look (Apple HIG Liquid Glass)
+  liquidglass: { bg:'#e8eaed', fg:'#1d1d1f', panel:'#f5f5f7', border:'#d2d2d7', red:'#007AFF',
+                 advanced: { sendBtnBg:'#007AFF', sendBtnHover:'#0066D6',
+                             userBubbleBg:'#e8eaed', aiBubbleBg:'#ffffff',
+                             inputBg:'#ffffff', inputBorder:'#d2d2d7',
+                             brandColor:'#007AFF', brandMixTo:'#1d1d1f',
+                             hamburgerColor:'#1d1d1f', toggleActive:'#007AFF',
+                             codeBg:'#f0f0f2', codeFg:'#1d1d1f',
+                             bubbleBorder:'#d2d2d7' } },
+  // macOS 27 Liquid Glass — Dark variant (Apple HIG dark-mode Liquid Glass)
+  'liquidglass-dark': { bg:'#1c1c1e', fg:'#f5f5f7', panel:'#2c2c2e', border:'#48484a', red:'#0A84FF',
+                 advanced: { sendBtnBg:'#0A84FF', sendBtnHover:'#007AFF',
+                             userBubbleBg:'#3a3a3c', aiBubbleBg:'#2c2c2e',
+                             inputBg:'#1c1c1e', inputBorder:'#48484a',
+                             brandColor:'#0A84FF', brandMixTo:'#f5f5f7',
+                             hamburgerColor:'#f5f5f7', toggleActive:'#0A84FF',
+                             codeBg:'#1c1c1e', codeFg:'#f5f5f7',
+                             bubbleBorder:'#48484a' } },
 };
 
 const DEFAULT_THEME = 'dark';
@@ -59,6 +77,8 @@ const THEME_DEFAULT_PATTERN = {
   organs:     'rain',
   ume:        'petals',
   cute:       'sparkles',
+  liquidglass:'none',
+  'liquidglass-dark': 'none',
 };
 
 // Default effect colors for specific themes (overrides --fg)
@@ -79,6 +99,15 @@ const THEME_DEFAULT_INTENSITY = {
 // Default frosted-glass state per theme. Themes not listed default to false.
 const THEME_DEFAULT_FROSTED = {
   lavender:   true,
+  liquidglass:true,
+  'liquidglass-dark': true,
+};
+
+// Default font per theme. Themes not listed default to mono (DEFAULT_FONT).
+// Liquid Glass forces the macOS system font stack (SF Pro via system-ui).
+const THEME_DEFAULT_FONT = {
+  liquidglass:'sans',
+  'liquidglass-dark': 'sans',
 };
 
 // ── Custom theme persistence ──
@@ -433,6 +462,18 @@ export function applyFrostedGlass(on) {
   document.body.classList.toggle('theme-frosted', !!on);
 }
 
+/** Toggle the macOS 27 "Liquid Glass" look. Adds `body.theme-liquidglass`
+ *  which layers Apple-HIG-spec specular highlights, vibrancy, continuous
+ *  corners, and soft lensing shadows on top of the frosted-glass base.
+ *  Called with the active theme name; toggles on for 'liquidglass' and
+ *  'liquidglass-dark'. The dark variant also adds 'theme-liquidglass-dark'
+ *  for dark-mode glass color overrides. */
+export function applyLiquidGlass(name) {
+  const isLg = name === 'liquidglass' || name === 'liquidglass-dark';
+  document.body.classList.toggle('theme-liquidglass', isLg);
+  document.body.classList.toggle('theme-liquidglass-dark', name === 'liquidglass-dark');
+}
+
 // Read current size multiplier for JS effects (canvas-based).
 function _getEffectSize() {
   const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bg-effect-size'));
@@ -479,6 +520,7 @@ export function save(name, colors, opts) {
   }
   Storage.setJSON(LS_KEY, obj);
   _syncToServer(obj);
+  applyLiquidGlass(name);
 }
 
 function _syncToServer(obj) {
@@ -647,7 +689,7 @@ export function initThemeUI() {
         <span style="background:${c.fg}"></span>
         <span style="background:${c.red}"></span>
       </div>
-      ${name === 'dark' ? 'original' : (name === 'gpt' ? 'GPT' : name)}
+      ${name === 'dark' ? 'original' : (name === 'gpt' ? 'GPT' : (name === 'liquidglass' ? 'Liquid Glass' : (name === 'liquidglass-dark' ? 'Liquid Glass Dark' : name)))}
     </div>
   `).join('');
 
@@ -709,7 +751,7 @@ export function initThemeUI() {
         sw.classList.add('active');
         syncPickers(colors);
         const ct = sw.dataset.custom ? customThemes[name] : null;
-        const f = ct && ct.font ? ct.font : DEFAULT_FONT;
+        const f = ct && ct.font ? ct.font : (THEME_DEFAULT_FONT[name] || DEFAULT_FONT);
         const d = ct && ct.density ? ct.density : DEFAULT_DENSITY;
         const p = ct && ct.bgPattern ? ct.bgPattern : (THEME_DEFAULT_PATTERN[name] || 'none');
         const ec = ct && ct.bgEffectColor ? ct.bgEffectColor : (THEME_DEFAULT_EFFECT_COLOR[name] || '');
@@ -724,6 +766,7 @@ export function initThemeUI() {
         applyBgEffectSize(sz);
         applyFrostedGlass(fr);
         applyBgPattern(p);
+        applyLiquidGlass(name);
         const fs = document.getElementById('theme-font-select');
         const ds = document.getElementById('theme-density-select');
         const ps = document.getElementById('theme-bg-pattern-select');
@@ -756,6 +799,7 @@ export function initThemeUI() {
   // Init color pickers from current theme and apply syntax colors
   const currentColors = saved ? saved.colors : THEMES[DEFAULT_THEME];
   applyColors(currentColors);
+  applyLiquidGlass(saved ? saved.name : DEFAULT_THEME);
   syncPickers(currentColors);
 
   // Reference colors for per-picker reset (the theme you started from)
@@ -940,6 +984,7 @@ export function initThemeUI() {
       syncPickers(colors);
       applyFontDensity(DEFAULT_FONT, DEFAULT_DENSITY);
       applyBgPattern('none');
+      applyLiquidGlass(DEFAULT_THEME);
       const fs = document.getElementById('theme-font-select');
       const ds = document.getElementById('theme-density-select');
       const ps = document.getElementById('theme-bg-pattern-select');
@@ -1092,7 +1137,7 @@ export function initThemeUI() {
   syncResetButtons();
 
   // Font, density, background pattern controls
-  const _initFont = (saved && saved.font) || DEFAULT_FONT;
+  const _initFont = (saved && saved.font) || (saved && THEME_DEFAULT_FONT[saved.name]) || DEFAULT_FONT;
   const _initDensity = (saved && saved.density) || DEFAULT_DENSITY;
   const _initPattern = (saved && saved.bgPattern) || (saved && THEME_DEFAULT_PATTERN[saved.name]) || 'none';
   const _initEffectColor = (saved && saved.bgEffectColor) || (saved && THEME_DEFAULT_EFFECT_COLOR[saved.name]) || '';
@@ -1109,6 +1154,7 @@ export function initThemeUI() {
   applyBgEffectSize(_initEffectSize);
   applyFrostedGlass(_initFrosted);
   applyBgPattern(_initPattern);
+  applyLiquidGlass(saved ? saved.name : DEFAULT_THEME);
 
   const fontSelect = document.getElementById('theme-font-select');
   const densitySelect = document.getElementById('theme-density-select');
@@ -2074,7 +2120,7 @@ function _initEmbers() {
 const themeModule = { initThemeUI, togglePopup, closePopup, makeDraggable,
                        THEMES, applyColors, applyFontDensity, applyBgPattern,
                        applyBgEffectColor, applyBgEffectIntensity, applyBgEffectSize,
-                       applyFrostedGlass,
+                       applyFrostedGlass, applyLiquidGlass,
                        save, getSaved, saveCustomTheme, deleteCustomTheme,
                        getCustomThemes };
 
@@ -2089,6 +2135,7 @@ async function _initWithSync() {
       if (serverTheme.name === 'sakura') serverTheme.name = 'ume';
       Storage.setJSON(LS_KEY, serverTheme);
       applyColors(serverTheme.colors);
+      applyLiquidGlass(serverTheme.name);
     }
   }
   // Also sync custom themes from server
