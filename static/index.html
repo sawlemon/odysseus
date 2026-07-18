@@ -1141,6 +1141,13 @@
           </button>
         </div>
         <div class="chat-input-right">
+          <!-- Model thinking level (reasoning effort) selector -->
+          <div class="mode-toggle mode-toggle-four thinking-toggle" id="thinking-toggle" role="group" aria-label="Model thinking level" title="Model thinking level — how much the model reasons before answering">
+            <button type="button" class="mode-toggle-btn active" id="think-off-btn" data-level="" aria-pressed="true">Auto</button>
+            <button type="button" class="mode-toggle-btn" id="think-low-btn" data-level="low" aria-pressed="false">Low</button>
+            <button type="button" class="mode-toggle-btn" id="think-med-btn" data-level="medium" aria-pressed="false">Med</button>
+            <button type="button" class="mode-toggle-btn" id="think-high-btn" data-level="high" aria-pressed="false">High</button>
+          </div>
           <!-- Agent / Chat mode toggle -->
           <div class="mode-toggle">
             <button type="button" class="mode-toggle-btn active" id="mode-agent-btn" aria-pressed="true">Agent</button>

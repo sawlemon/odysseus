@@ -1806,6 +1806,41 @@ function initializeEventListeners() {
     setMode(currentMode);
   })();
 
+  // ── Model thinking level (reasoning effort) selector ──
+  (function initThinkingToggle() {
+    const toggle = el('thinking-toggle');
+    if (!toggle) return;
+    const btns = Array.from(toggle.querySelectorAll('.mode-toggle-btn'));
+    // Pill position per level: Auto=0, low=1, medium=2, high=3.
+    const PILL = { '': '', low: 'think-1', medium: 'think-2', high: 'think-3' };
+    let current = loadToggleState().thinkingLevel || '';
+    if (!(current in PILL)) current = '';
+
+    function setLevel(level, persist) {
+      if (!(level in PILL)) level = '';
+      current = level;
+      if (persist) {
+        const st = loadToggleState();
+        st.thinkingLevel = level;
+        saveToggleState(st);
+      }
+      btns.forEach((b) => {
+        const active = (b.dataset.level || '') === level;
+        b.classList.toggle('active', active);
+        b.setAttribute('aria-pressed', String(active));
+      });
+      toggle.classList.remove('think-1', 'think-2', 'think-3');
+      if (PILL[level]) toggle.classList.add(PILL[level]);
+    }
+
+    // Read by the send path (chat.js) at submit time.
+    window.__odysseusGetThinkingLevel = () => current;
+    btns.forEach((b) => {
+      b.addEventListener('click', () => setLevel(b.dataset.level || '', true));
+    });
+    setLevel(current, false);
+  })();
+
   // ── Tool splash explainer messages (shown first 2 times per tool) ──
   const SPLASH_COUNT_KEY = 'odysseus-tool-splash-counts';
   const SPLASH_MAX = 2;

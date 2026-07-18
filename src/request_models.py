@@ -12,17 +12,25 @@ class ChatRequest(BaseModel):
     use_research: Optional[bool] = Field(default=False, description="Enable deep research")
     time_filter: Optional[str] = Field(default=None, description="Time filter for search")
     preset_id: Optional[str] = Field(default=None, description="Preset identifier")
-    
+    reasoning_effort: Optional[str] = Field(default=None, description="Thinking level: low/medium/high")
+
     @field_validator('message')
     @classmethod
     def clean_message(cls, v):
         return v.strip()
-    
+
     @field_validator('time_filter')
     @classmethod
     def validate_time_filter(cls, v):
         if v is not None and v not in ['day', 'week', 'month', 'year']:
             return None  # Just set to None if invalid rather than raising error
+        return v
+
+    @field_validator('reasoning_effort')
+    @classmethod
+    def validate_reasoning_effort(cls, v):
+        if v is not None and v not in ['low', 'medium', 'high']:
+            return None  # Ignore invalid levels; fall back to model default
         return v
 
 
