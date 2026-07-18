@@ -1242,6 +1242,85 @@ def _supports_thinking(model: str) -> bool:
     m = model.lower()
     return any(p in m for p in _THINKING_MODEL_PATTERNS)
 
+# User-selectable reasoning effort levels exposed by the composer's thinking-level
+# slider. "" / None means "leave it to the model/provider default" (backward
+# compatible — nothing extra is sent for non-Mistral providers).
+_VALID_REASONING_EFFORTS = {"low", "medium", "high"}
+
+# Extended-thinking token budgets for Anthropic Claude models, keyed by the same
+# low/medium/high levels. Anthropic uses a `thinking.budget_tokens` param rather
+# than OpenAI's `reasoning_effort` string.
+_ANTHROPIC_THINKING_BUDGETS = {"low": 2048, "medium": 8192, "high": 16384}
+
+
+def normalize_reasoning_effort(level) -> Optional[str]:
+    """Coerce an arbitrary reasoning-effort input to a valid level or None."""
+    if not level:
+        return None
+    lvl = str(level).strip().lower()
+    return lvl if lvl in _VALID_REASONING_EFFORTS else None
+
+
+def _anthropic_supports_thinking(model: str) -> bool:
+    """Best-effort check for Claude models that accept extended thinking.
+
+    Extended thinking landed with Claude 3.7 and is on all 4.x models. Older
+    3.5/3.0 models 400 if sent a `thinking` block, so gate on the version.
+    """
+    if not model:
+        return False
+    m = model.lower()
+    if "claude" not in m and "anthropic" not in m:
+        return False
+    match = re.search(r"(?:claude[-_]?)?(?:sonnet|opus|haiku)?[-_]?(\d)[-_.](\d)", m)
+    if match:
+        try:
+            return (int(match.group(1)), int(match.group(2))) >= (3, 7)
+        except ValueError:
+            pass
+    # Bare "claude-4"/"opus-4" style with no minor — treat 4+ as capable.
+    match = re.search(r"(?<!\d)(\d)(?:[-_.]|$)", m)
+    if match:
+        try:
+            return int(match.group(1)) >= 4
+        except ValueError:
+            pass
+    return False
+
+
+def _apply_reasoning_effort(payload: Dict, provider: str, model: str,
+                            reasoning_effort: Optional[str]) -> None:
+    """Apply a reasoning-effort level to an OpenAI-compatible payload.
+
+    - Mistral thinking-capable models always get a `reasoning_effort` (the
+      user's pick, else the configured default) — preserving prior behaviour.
+    - Any other OpenAI-compatible provider gets `reasoning_effort` ONLY when the
+      user explicitly picked a level, so non-reasoning models are untouched.
+    """
+    level = normalize_reasoning_effort(reasoning_effort)
+    if provider == "mistral":
+        if _supports_thinking(model):
+            payload["reasoning_effort"] = level or _MISTRAL_REASONING_EFFORT
+        return
+    if level:
+        payload["reasoning_effort"] = level
+
+
+def _apply_anthropic_thinking(payload: Dict, model: str,
+                              reasoning_effort: Optional[str]) -> None:
+    """Enable Claude extended thinking for a user-selected reasoning level."""
+    level = normalize_reasoning_effort(reasoning_effort)
+    if not level or not _anthropic_supports_thinking(model):
+        return
+    budget = _ANTHROPIC_THINKING_BUDGETS[level]
+    # Extended thinking requires max_tokens > budget_tokens and rejects a custom
+    # temperature — Anthropic 400s otherwise.
+    max_tokens = payload.get("max_tokens") or 0
+    if max_tokens <= budget:
+        payload["max_tokens"] = budget + 4096
+    payload["thinking"] = {"type": "enabled", "budget_tokens": budget}
+    payload.pop("temperature", None)
+
 def _normalize_mistral_content(content):
     """Mistral returns content as a structured array when reasoning is on:
         [{"type": "thinking", "thinking": [{"type": "text", "text": "..."}], "closed": true},
@@ -1382,7 +1461,7 @@ def _openrouter_pdf_plugins() -> list:
     return [{"id": "file-parser", "pdf": {"engine": engine}}]
 
 
-def _build_anthropic_payload(model, messages, temperature, max_tokens, stream=False, tools=None):
+def _build_anthropic_payload(model, messages, temperature, max_tokens, stream=False, tools=None, reasoning_effort=None):
     """Convert OpenAI-style messages to Anthropic format."""
     system_parts = []
     chat_messages = []
@@ -1467,6 +1546,7 @@ def _build_anthropic_payload(model, messages, temperature, max_tokens, stream=Fa
             # The breakpoint caches all tool defs preceding it in the request.
             anthropic_tools[-1]["cache_control"] = {"type": "ephemeral"}
             payload["tools"] = anthropic_tools
+    _apply_anthropic_thinking(payload, model, reasoning_effort)
     return payload
 
 def _build_anthropic_headers(headers):
@@ -1825,8 +1905,9 @@ def normalize_model_id(
     return None
 
 def llm_call(url: str, model: str, messages: List[Dict], temperature: float = LLMConfig.DEFAULT_TEMPERATURE,
-             max_tokens: int = LLMConfig.DEFAULT_MAX_TOKENS, headers: Optional[Dict] = None, 
-             timeout: int = LLMConfig.DEFAULT_TIMEOUT, prompt_type: Optional[str] = None) -> str:
+             max_tokens: int = LLMConfig.DEFAULT_MAX_TOKENS, headers: Optional[Dict] = None,
+             timeout: int = LLMConfig.DEFAULT_TIMEOUT, prompt_type: Optional[str] = None,
+             reasoning_effort: Optional[str] = None) -> str:
     """Synchronous LLM call with optional prompt type enhancement."""
     h = _provider_headers(_detect_provider(url))
     # Tolerate headers that arrive as a JSON string (some sessions stored them
@@ -1865,7 +1946,7 @@ def llm_call(url: str, model: str, messages: List[Dict], temperature: float = LL
     if provider == "anthropic":
         target_url = _normalize_anthropic_url(url)
         h = _build_anthropic_headers(headers)
-        payload = _build_anthropic_payload(model, messages_copy, temperature, max_tokens)
+        payload = _build_anthropic_payload(model, messages_copy, temperature, max_tokens, reasoning_effort=reasoning_effort)
     elif provider == "ollama":
         target_url = _normalize_ollama_url(url)
         payload = _build_ollama_payload(
@@ -1888,8 +1969,7 @@ def llm_call(url: str, model: str, messages: List[Dict], temperature: float = LL
             tok_key = "max_completion_tokens" if _uses_max_completion_tokens(model) else "max_tokens"
             payload[tok_key] = max_tokens
         _apply_local_generation_stability(payload, target_url, model)
-        if provider == "mistral" and _supports_thinking(model):
-            payload["reasoning_effort"] = _MISTRAL_REASONING_EFFORT
+        _apply_reasoning_effort(payload, provider, model, reasoning_effort)
         if _messages_have_file_blocks(messages_copy):
             if provider == "openrouter":
                 payload["plugins"] = _openrouter_pdf_plugins()
@@ -2003,6 +2083,7 @@ async def llm_call_async(
     prompt_type: Optional[str] = None,
     session_id: Optional[str] = None,
     workload: str = "foreground",
+    reasoning_effort: Optional[str] = None,
 ) -> str:
     """Asynchronous LLM call using httpx with connection pooling, timeout, retry logic, and performance logging."""
     provider = _detect_provider(url)
@@ -2074,7 +2155,7 @@ async def llm_call_async(
     if provider == "anthropic":
         target_url = _normalize_anthropic_url(url)
         h = _build_anthropic_headers(headers)
-        payload = _build_anthropic_payload(model, messages_copy, temperature, max_tokens)
+        payload = _build_anthropic_payload(model, messages_copy, temperature, max_tokens, reasoning_effort=reasoning_effort)
     elif provider == "ollama":
         target_url = _normalize_ollama_url(url)
         h = {"Content-Type": "application/json"}
@@ -2103,8 +2184,7 @@ async def llm_call_async(
         # Suppress thinking for qwen3/gemma4 on Ollama /v1 — same as stream_llm.
         if _is_ollama_openai_compat_url(url) and _supports_thinking(model):
             payload["think"] = False
-        if provider == "mistral" and _supports_thinking(model):
-            payload["reasoning_effort"] = _MISTRAL_REASONING_EFFORT
+        _apply_reasoning_effort(payload, provider, model, reasoning_effort)
         _apply_local_cache_affinity(payload, url, session_id)
         _apply_local_generation_stability(payload, target_url, model)
         if _messages_have_file_blocks(messages_copy):
@@ -2182,7 +2262,8 @@ async def stream_llm(url: str, model: str, messages: List[Dict], temperature: fl
                      max_tokens: int = LLMConfig.DEFAULT_MAX_TOKENS, headers: Optional[Dict] = None,
                      timeout: int = LLMConfig.STREAM_TIMEOUT, prompt_type: Optional[str] = None,
                      tools: Optional[List[Dict]] = None, session_id: Optional[str] = None,
-                     tool_choice_none: bool = False, workload: str = "foreground"):
+                     tool_choice_none: bool = False, workload: str = "foreground",
+                     reasoning_effort: Optional[str] = None):
     target_url = _stream_target_url(url)
     async with _local_model_slot(target_url, model, workload):
         async for chunk in _stream_llm_inner(
@@ -2197,6 +2278,7 @@ async def stream_llm(url: str, model: str, messages: List[Dict], temperature: fl
             tools=tools,
             session_id=session_id,
             tool_choice_none=tool_choice_none,
+            reasoning_effort=reasoning_effort,
         ):
             yield chunk
 
@@ -2205,7 +2287,7 @@ async def _stream_llm_inner(url: str, model: str, messages: List[Dict], temperat
                             max_tokens: int = LLMConfig.DEFAULT_MAX_TOKENS, headers: Optional[Dict] = None,
                             timeout: int = LLMConfig.STREAM_TIMEOUT, prompt_type: Optional[str] = None,
                             tools: Optional[List[Dict]] = None, session_id: Optional[str] = None,
-                            tool_choice_none: bool = False):
+                            tool_choice_none: bool = False, reasoning_effort: Optional[str] = None):
     """Stream LLM responses with improved error handling.
 
     Yields SSE chunks:
@@ -2234,7 +2316,7 @@ async def _stream_llm_inner(url: str, model: str, messages: List[Dict], temperat
     if provider == "anthropic":
         target_url = _normalize_anthropic_url(url)
         h = _build_anthropic_headers(headers)
-        payload = _build_anthropic_payload(model, messages_copy, temperature, max_tokens, stream=True, tools=tools)
+        payload = _build_anthropic_payload(model, messages_copy, temperature, max_tokens, stream=True, tools=tools, reasoning_effort=reasoning_effort)
     elif provider == "ollama":
         target_url = _normalize_ollama_url(url)
         h = {"Content-Type": "application/json"}
@@ -2269,10 +2351,11 @@ async def _stream_llm_inner(url: str, model: str, messages: List[Dict], temperat
             payload["tool_choice"] = "none"
         # Mistral thinking-capable models — send reasoning_effort so Mistral
         # activates thinking mode and returns structured reasoning_content.
-        # Effort level is configurable via ODYSSEUS_MISTRAL_REASONING_EFFORT
-        # (high / medium / low / none); default "high".
-        if provider == "mistral" and _supports_thinking(model):
-            payload["reasoning_effort"] = _MISTRAL_REASONING_EFFORT
+        # Effort level is the user's per-request pick (thinking-level slider),
+        # else ODYSSEUS_MISTRAL_REASONING_EFFORT (high / medium / low; default
+        # "high"). Other OpenAI-compatible providers only get reasoning_effort
+        # when the user explicitly selected a level.
+        _apply_reasoning_effort(payload, provider, model, reasoning_effort)
         # For Ollama's OpenAI-compat /v1 endpoint with thinking models (qwen3,
         # gemma4, etc.), suppress thinking so tool calls aren't swallowed inside
         # <think> blocks. Ollama /v1 accepts "think": false as a top-level param.

@@ -2793,6 +2793,22 @@ body.bg-pattern-sparkles {
     .mode-toggle.mode-toggle-three.mode-third::before {
       transform: translateX(200%);
     }
+    /* Four-position variant — used by the thinking-level selector (Auto/Low/Med/High). */
+    .mode-toggle.mode-toggle-four::before {
+      width: 25%;
+    }
+    .mode-toggle.mode-toggle-four.think-1::before {
+      transform: translateX(100%);
+    }
+    .mode-toggle.mode-toggle-four.think-2::before {
+      transform: translateX(200%);
+    }
+    .mode-toggle.mode-toggle-four.think-3::before {
+      transform: translateX(300%);
+    }
+    .thinking-toggle .mode-toggle-btn {
+      padding: 0 8px;
+    }
     #mode-agent-btn {
       border-radius: 10px 0 0 10px;
     }

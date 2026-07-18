@@ -1236,6 +1236,12 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
       if (presetsModule.getSelectedPreset()) {
         fd.append('preset_id', presetsModule.getSelectedPreset());
       }
+      // Model thinking level (reasoning effort) — '' = model default, so omit.
+      try {
+        const _thinkLevel = (typeof window.__odysseusGetThinkingLevel === 'function')
+          ? window.__odysseusGetThinkingLevel() : '';
+        if (_thinkLevel) fd.append('reasoning_effort', _thinkLevel);
+      } catch (_e) { /* best-effort */ }
 
 
       const abortCtrl = new AbortController();
